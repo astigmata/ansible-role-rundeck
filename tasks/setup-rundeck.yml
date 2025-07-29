@@ -1,10 +1,21 @@
 ---
-- name: Install Rundeck
+- name: Install and configure Rundeck packages
   ansible.builtin.apt:
-    name: rundeck
+    name:
+      - rundeck
+      - default-jre-headless
     state: present
     update_cache: true
-  notify: Restart rundeck
+
+- name: Stop any existing Rundeck services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - rundeckd
+    - rundeck
+  ignore_errors: true
 
 - name: Create rundeck directories
   ansible.builtin.file:
@@ -17,24 +28,13 @@
     - /var/log/rundeck
     - /var/rundeck/projects
 
-- name: Set correct permissions for Rundeck directories
-  ansible.builtin.file:
-    path: "{{ item }}"
-    owner: rundeck
-    group: rundeck
-    recurse: true
-  loop:
-    - /var/lib/rundeck
-    - /var/log/rundeck
-    - /etc/rundeck
-
 - name: Configure Rundeck framework properties
   ansible.builtin.lineinfile:
     path: /etc/rundeck/framework.properties
     regexp: "^framework.server.url"
-    line: "framework.server.url = {{ rundeck_server_url }}"
+    line: "framework.server.url = {{ rundeck_server_url | default('http://localhost:4440') }}"
     backup: true
-  notify: Restart rundeck
+  notify: restart rundeck
 
 - name: Configure Rundeck server settings
   ansible.builtin.lineinfile:
@@ -44,99 +44,90 @@
     backup: true
   loop:
     - regexp: "^grails.serverURL"
-      line: "grails.serverURL={{ rundeck_server_url }}"
+      line: "grails.serverURL={{ rundeck_server_url | default('http://localhost:4440') }}"
     - regexp: "^server.address"
-      line: "server.address={{ rundeck_listen_address }}"
-    - regexp: "^server.port"
-      line: "server.port={{ rundeck_port }}"
-  notify: Restart rundeck
+      line: "server.address={{ rundeck_listen_address | default('0.0.0.0') }}"
+  notify: restart rundeck
 
 - name: Create admin user properties file
   ansible.builtin.copy:
     content: |
-      {{ rundeck_admin_user }}:MD5:{{ (rundeck_admin_password | hash('md5')) }},user,admin,architect
+      {{ rundeck_admin_user | default('admin') }}:MD5:{{ (rundeck_admin_password | default('admin123') | hash('md5')) }},user,admin,architect
     dest: /etc/rundeck/realm.properties
     owner: rundeck
     group: rundeck
     mode: '0640'
     backup: true
-  notify: Restart rundeck
+  notify: restart rundeck
 
-- name: Configure Rundeck login module
+- name: Check which Rundeck service exists
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: service_files
+  loop:
+    - /etc/systemd/system/rundeck.service
+    - /lib/systemd/system/rundeck.service
+    - /etc/systemd/system/rundeckd.service
+    - /lib/systemd/system/rundeckd.service
+
+- name: Set service name based on available files
+  ansible.builtin.set_fact:
+    rundeck_service_name: "{{ 'rundeck' if service_files.results | selectattr('stat.exists') | selectattr('item', 'search', 'rundeck.service') | list | length > 0 else 'rundeckd' }}"
+
+- name: Create systemd service for Rundeck if not exists
   ansible.builtin.copy:
     content: |
-      RDpropertyfilelogin {
-          org.eclipse.jetty.jaas.spi.PropertyFileLoginModule required
-          debug="true"
-          file="/etc/rundeck/realm.properties";
-      };
-    dest: /etc/rundeck/jaas-loginmodule.conf
-    owner: rundeck
-    group: rundeck
-    mode: '0644'
-    backup: true
-  notify: Restart rundeck
+      [Unit]
+      Description=Rundeck Runbook Automation
+      After=network.target
 
-- name: Configure Rundeck service environment
-  ansible.builtin.template:
-    src: profile.j2
-    dest: /etc/rundeck/profile
-    owner: rundeck
-    group: rundeck
+      [Service]
+      Type=forking
+      User=rundeck
+      Group=rundeck
+      Environment="JAVA_HOME=/usr/lib/jvm/default-java"
+      Environment="RUNDECK_HOME=/var/lib/rundeck"
+      ExecStart=/etc/init.d/rundeckd start
+      ExecStop=/etc/init.d/rundeckd stop
+      ExecReload=/etc/init.d/rundeckd restart
+      PIDFile=/var/run/rundeckd.pid
+      KillMode=process
+      Restart=on-failure
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/rundeck.service
+    owner: root
+    group: root
     mode: '0644'
-  notify: Restart rundeck
+  when: rundeck_service_name == 'rundeck'
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
 
 - name: Enable and start Rundeck service
   ansible.builtin.systemd:
-    name: rundeckd
+    name: "{{ rundeck_service_name }}"
     enabled: true
     state: started
 
 - name: Wait for Rundeck to be available
   ansible.builtin.wait_for:
-    port: "{{ rundeck_port }}"
-    host: "{{ rundeck_listen_address if rundeck_listen_address != '0.0.0.0' else '127.0.0.1' }}"
-    delay: 10
-    timeout: 120
+    port: 4440
+    host: 127.0.0.1
+    delay: 15
+    timeout: 180
 
-- name: Verify Rundeck API availability
-  ansible.builtin.uri:
-    url: "{{ rundeck_server_url }}/api/14/system/info"
-    method: GET
-    user: "{{ rundeck_admin_user }}"
-    password: "{{ rundeck_admin_password }}"
-    force_basic_auth: true
-    status_code: [200]
-  register: api_test
-  retries: 6
-  delay: 10
-  until: api_test is not failed
+- name: Check Rundeck process
+  ansible.builtin.command: pgrep -f rundeck
+  register: rundeck_process
+  ignore_errors: true
 
-- name: Create default project
-  ansible.builtin.uri:
-    url: "{{ rundeck_server_url }}/api/14/projects"
-    method: POST
-    headers:
-      Content-Type: "application/json"
-      Accept: "application/json"
-    body_format: json
-    body:
-      name: "default-project"
-      description: "Default project for Rundeck"
-      config:
-        project.description: "Default project created during setup"
-    user: "{{ rundeck_admin_user }}"
-    password: "{{ rundeck_admin_password }}"
-    force_basic_auth: true
-    status_code: [201, 409]
-  register: project_creation
-  retries: 3
-  delay: 5
-
-- name: Display setup completion
+- name: Display service status
   ansible.builtin.debug:
     msg:
-      - "Rundeck installation completed!"
-      - "Access URL: {{ rundeck_server_url }}"
-      - "Username: {{ rundeck_admin_user }}"
-      - "Service: sudo systemctl status rundeckd"
+      - "Service used: {{ rundeck_service_name }}"
+      - "Rundeck process: {{ 'Running' if rundeck_process.rc == 0 else 'Not running' }}"
+      - "Check logs: sudo journalctl -u {{ rundeck_service_name }} -f"

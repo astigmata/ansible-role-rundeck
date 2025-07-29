@@ -1,5 +1,5 @@
 ---
-- name: Restart rundeck
+- name: restart rundeck
   ansible.builtin.systemd:
-    name: rundeckd
+    name: "{{ rundeck_service_name | default('rundeck') }}"
     state: restarted
