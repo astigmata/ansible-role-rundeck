@@ -1,41 +1,41 @@
 - name: Install Rundeck
-  apt:
+  ansible.builtin.apt:
     name: rundeck
     state: present
 
 - name: Configure Rundeck framework properties
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/rundeck/framework.properties
     regexp: "^framework.server.url"
     line: "framework.server.url = http://localhost:4440"
-    backup: yes
+    backup: true
 
 - name: Configure Rundeck server URL
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/rundeck/rundeck-config.properties
     regexp: "^grails.serverURL"
     line: "grails.serverURL=http://localhost:4440"
-    backup: yes
+    backup: true
 
 - name: Set Rundeck to listen on all interfaces
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/rundeck/rundeck-config.properties
     regexp: "^server.address"
     line: "server.address=0.0.0.0"
-    backup: yes
+    backup: true
 
 - name: Create admin user properties file
-  copy:
+  ansible.builtin.copy:
     content: |
       admin:MD5:21232f297a57a5a743894a0e4a801fc3,user,admin,architect
     dest: /etc/rundeck/realm.properties
     owner: rundeck
     group: rundeck
     mode: '0640'
-    backup: yes
+    backup: true
 
 - name: Configure Rundeck login module
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: /etc/rundeck/jaas-loginmodule.conf
     block: |
       RDpropertyfilelogin {
@@ -43,21 +43,21 @@
           debug="true"
           file="/etc/rundeck/realm.properties";
       };
-    backup: yes
+    backup: true
 
 - name: Set correct permissions for Rundeck directories
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     owner: rundeck
     group: rundeck
-    recurse: yes
+    recurse: true
   loop:
     - /var/lib/rundeck
     - /var/log/rundeck
     - /etc/rundeck
 
 - name: Create rundeck log directory if not exists
-  file:
+  ansible.builtin.file:
     path: /var/log/rundeck
     state: directory
     owner: rundeck
@@ -65,7 +65,7 @@
     mode: '0755'
 
 - name: Configure Rundeck service environment
-  template:
+  ansible.builtin.template:
     src: profile.j2
     dest: /etc/rundeck/profile
     owner: rundeck
@@ -73,7 +73,7 @@
     mode: '0644'
 
 - name: Create rundeck projects directory
-  file:
+  ansible.builtin.file:
     path: /var/rundeck/projects
     state: directory
     owner: rundeck
@@ -81,14 +81,13 @@
     mode: '0755'
 
 - name: Stop default rundeckd service
-  systemd:
+  ansible.builtin.systemd:
     name: rundeckd
     state: stopped
-    enabled: no
-  ignore_errors: yes
+    enabled: false
 
 - name: Create systemd service file for Rundeck
-  template:
+  ansible.builtin.template:
     src: rundeck.service.j2
     dest: /etc/systemd/system/rundeck.service
     owner: root
@@ -96,73 +95,73 @@
     mode: '0644'
 
 - name: Find rundeck war file
-  find:
+  ansible.builtin.find:
     paths: /var/lib/rundeck/bootstrap
     patterns: "rundeck-*.war"
   register: rundeck_war
 
 - name: Update systemd service with correct war file
-  replace:
+  ansible.builtin.replace:
     path: /etc/systemd/system/rundeck.service
     regexp: 'rundeck-5\.12\.0-20250512\.war'
     replace: "{{ rundeck_war.files[0].path | basename }}"
   when: rundeck_war.files | length > 0
 
 - name: Reload systemd daemon
-  systemd:
-    daemon_reload: yes
+  ansible.builtin.systemd:
+    daemon_reload: true
 
 - name: Enable and start custom Rundeck service
-  systemd:
+  ansible.builtin.systemd:
     name: rundeck
-    enabled: yes
+    enabled: true
     state: started
 
 - name: Wait a moment for service initialization
-  pause:
+  ansible.builtin.pause:
     seconds: 15
 
 - name: Wait for Rundeck to start on port 4440
-  wait_for:
+  ansible.builtin.wait_for:
     port: 4440
     host: 127.0.0.1
     delay: 5
     timeout: 120
 
 - name: Check custom Rundeck service status
-  systemd:
+  ansible.builtin.systemd:
     name: rundeck
   register: rundeck_service_status
 
 - name: Display Rundeck service status
-  debug:
+  ansible.builtin.debug:
     msg: "Rundeck service is {{ rundeck_service_status.status.ActiveState }}"
 
 - name: Check Rundeck service status
-  systemd:
+  ansible.builtin.systemd:
     name: rundeckd
   register: rundeck_status
 
 - name: Display Rundeck status
-  debug:
+  ansible.builtin.debug:
     msg: "Rundeck service is {{ rundeck_status.status.ActiveState }}"
 
 - name: Test Rundeck API availability
-  uri:
+  ansible.builtin.uri:
     url: "http://127.0.0.1:4440/api/14/system/info"
     method: GET
     user: "{{ rundeck_admin_user }}"
     password: "{{ rundeck_admin_password }}"
-    force_basic_auth: yes
+    force_basic_auth: true
     status_code: [200]
   register: api_test
   retries: 12
   delay: 10
   until: api_test is not failed
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Create a default project
-  uri:
+  ansible.builtin.uri:
     url: "http://127.0.0.1:4440/api/14/projects"
     method: POST
     headers:
@@ -176,7 +175,7 @@
         project.description: "Default project created during setup"
     user: "{{ rundeck_admin_user }}"
     password: "{{ rundeck_admin_password }}"
-    force_basic_auth: yes
+    force_basic_auth: true
     status_code: [201, 409]  # 409 if project already exists
   register: project_creation
   retries: 3
@@ -184,7 +183,7 @@
   when: api_test is not failed
 
 - name: Display setup completion message
-  debug:
+  ansible.builtin.debug:
     msg:
       - "Rundeck installation completed!"
       - "Access URL: http://192.168.56.10:4440 or http://localhost:4440"

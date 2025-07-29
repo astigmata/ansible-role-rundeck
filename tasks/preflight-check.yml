@@ -1,10 +1,10 @@
 - name: Update apt cache
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     cache_valid_time: 3600
 
 - name: Install required packages
-  apt:
+  ansible.builtin.apt:
     name:
       - "{{ java_version }}"
       - curl
@@ -15,16 +15,16 @@
     state: present
 
 - name: Add Rundeck GPG key
-  apt_key:
+  ansible.builtin.apt_key:
     url: https://packages.rundeck.com/pagerduty/rundeck/gpgkey
     state: present
 
 - name: Add Rundeck repository
-  apt_repository:
+  ansible.builtin.apt_repository:
     repo: "deb https://packages.rundeck.com/pagerduty/rundeck/any/ any main"
     state: present
     filename: rundeck
 
 - name: Update apt cache after adding repository
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
