@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  author: astigmata
+  role_name: rundeck
+  namespace: astigmata
+  description: Deploy Rundeck automation server
+  license: MIT
+  min_ansible_version: "2.12"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - "all"
+    - name: Debian
+      versions:
+        - "all"
+
+  galaxy_tags:
+    - rundeck
+    - automation
+    - deployment
+    - ci
+    - cd
+
+dependencies: []

@@ -1,0 +1,7 @@
+java_version: "openjdk-11-jdk"
+rundeck_version: "5.7.0"
+rundeck_admin_user: admin
+rundeck_admin_password: admin123
+rundeck_server_url: "http://{{ ansible_default_ipv4.address }}:4440"
+rundeck_listen_address: "0.0.0.0"
+rundeck_port: 4440
