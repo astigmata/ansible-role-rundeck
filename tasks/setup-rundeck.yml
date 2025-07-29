@@ -130,7 +130,7 @@
     url: "http://127.0.0.1:4440/api/45/system/info"
     method: GET
     user: "{{ rundeck_admin_user | default('admin') }}"
-    password: "{{ rundeck_admin_password | default('admin') }}"
+    password: "{{ rundeck_admin_password | default('admin123') }}"
     force_basic_auth: true
     status_code: [200]
   retries: 3
