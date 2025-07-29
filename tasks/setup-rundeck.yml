@@ -125,6 +125,14 @@
   register: rundeck_process
   ignore_errors: true
 
+- name: Verify Rundeck API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:4440/api/45/system/info"
+    method: GET
+    status_code: [200]
+  retries: 3
+  delay: 5
+
 - name: Display service status
   ansible.builtin.debug:
     msg:

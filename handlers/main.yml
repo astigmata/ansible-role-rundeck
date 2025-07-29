@@ -1,5 +1,14 @@
 ---
+- name: Enable and start Rundeck service
+  ansible.builtin.systemd:
+    name: "{{ rundeck_service_name }}"
+    enabled: true
+    state: started
+  register: rundeck_service_result
+
+# Éviter le restart si déjà started
 - name: restart rundeck
   ansible.builtin.systemd:
-    name: "{{ rundeck_service_name | default('rundeck') }}"
+    name: "{{ rundeck_service_name | default('rundeckd') }}"
     state: restarted
+  when: rundeck_service_result.changed
