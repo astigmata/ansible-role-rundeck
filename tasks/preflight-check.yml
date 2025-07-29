@@ -1,0 +1,30 @@
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required packages
+  apt:
+    name:
+      - "{{ java_version }}"
+      - curl
+      - wget
+      - gnupg2
+      - software-properties-common
+      - net-tools
+    state: present
+
+- name: Add Rundeck GPG key
+  apt_key:
+    url: https://packages.rundeck.com/pagerduty/rundeck/gpgkey
+    state: present
+
+- name: Add Rundeck repository
+  apt_repository:
+    repo: "deb https://packages.rundeck.com/pagerduty/rundeck/any/ any main"
+    state: present
+    filename: rundeck
+
+- name: Update apt cache after adding repository
+  apt:
+    update_cache: yes

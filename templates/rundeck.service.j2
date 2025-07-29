@@ -1,0 +1,19 @@
+[Unit]
+Description=Rundeck runbook automation
+After=network.target
+
+[Service]
+Type=simple
+User=rundeck
+Group=rundeck
+EnvironmentFile=/etc/rundeck/profile
+ExecStart=/usr/bin/java -Djava.security.egd=file:/dev/./urandom -Xmx1024m -Xms512m -XX:MaxMetaspaceSize=512m -server -Drdeck.base=/var/lib/rundeck -Drundeck.server.configDir=/etc/rundeck -jar /var/lib/rundeck/bootstrap/rundeck-5.12.0-20250512.war --skipinstall
+WorkingDirectory=/var/lib/rundeck
+StandardOutput=journal
+StandardError=journal
+Restart=always
+RestartSec=10
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

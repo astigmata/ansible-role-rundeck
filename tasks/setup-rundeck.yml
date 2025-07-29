@@ -1,0 +1,196 @@
+- name: Install Rundeck
+  apt:
+    name: rundeck
+    state: present
+
+- name: Configure Rundeck framework properties
+  lineinfile:
+    path: /etc/rundeck/framework.properties
+    regexp: "^framework.server.url"
+    line: "framework.server.url = http://localhost:4440"
+    backup: yes
+
+- name: Configure Rundeck server URL
+  lineinfile:
+    path: /etc/rundeck/rundeck-config.properties
+    regexp: "^grails.serverURL"
+    line: "grails.serverURL=http://localhost:4440"
+    backup: yes
+
+- name: Set Rundeck to listen on all interfaces
+  lineinfile:
+    path: /etc/rundeck/rundeck-config.properties
+    regexp: "^server.address"
+    line: "server.address=0.0.0.0"
+    backup: yes
+
+- name: Create admin user properties file
+  copy:
+    content: |
+      admin:MD5:21232f297a57a5a743894a0e4a801fc3,user,admin,architect
+    dest: /etc/rundeck/realm.properties
+    owner: rundeck
+    group: rundeck
+    mode: '0640'
+    backup: yes
+
+- name: Configure Rundeck login module
+  blockinfile:
+    path: /etc/rundeck/jaas-loginmodule.conf
+    block: |
+      RDpropertyfilelogin {
+          org.eclipse.jetty.jaas.spi.PropertyFileLoginModule required
+          debug="true"
+          file="/etc/rundeck/realm.properties";
+      };
+    backup: yes
+
+- name: Set correct permissions for Rundeck directories
+  file:
+    path: "{{ item }}"
+    owner: rundeck
+    group: rundeck
+    recurse: yes
+  loop:
+    - /var/lib/rundeck
+    - /var/log/rundeck
+    - /etc/rundeck
+
+- name: Create rundeck log directory if not exists
+  file:
+    path: /var/log/rundeck
+    state: directory
+    owner: rundeck
+    group: rundeck
+    mode: '0755'
+
+- name: Configure Rundeck service environment
+  template:
+    src: template/profile.j2
+    dest: /etc/rundeck/profile
+    owner: rundeck
+    group: rundeck
+    mode: '0644'
+
+- name: Create rundeck projects directory
+  file:
+    path: /var/rundeck/projects
+    state: directory
+    owner: rundeck
+    group: rundeck
+    mode: '0755'
+
+- name: Stop default rundeckd service
+  systemd:
+    name: rundeckd
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Create systemd service file for Rundeck
+  template:
+    src: templates/rundeck.service.j2
+    dest: /etc/systemd/system/rundeck.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Find rundeck war file
+  find:
+    paths: /var/lib/rundeck/bootstrap
+    patterns: "rundeck-*.war"
+  register: rundeck_war
+
+- name: Update systemd service with correct war file
+  replace:
+    path: /etc/systemd/system/rundeck.service
+    regexp: 'rundeck-5\.12\.0-20250512\.war'
+    replace: "{{ rundeck_war.files[0].path | basename }}"
+  when: rundeck_war.files | length > 0
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Enable and start custom Rundeck service
+  systemd:
+    name: rundeck
+    enabled: yes
+    state: started
+
+- name: Wait a moment for service initialization
+  pause:
+    seconds: 15
+
+- name: Wait for Rundeck to start on port 4440
+  wait_for:
+    port: 4440
+    host: 127.0.0.1
+    delay: 5
+    timeout: 120
+
+- name: Check custom Rundeck service status
+  systemd:
+    name: rundeck
+  register: rundeck_service_status
+
+- name: Display Rundeck service status
+  debug:
+    msg: "Rundeck service is {{ rundeck_service_status.status.ActiveState }}"
+
+- name: Check Rundeck service status
+  systemd:
+    name: rundeckd
+  register: rundeck_status
+
+- name: Display Rundeck status
+  debug:
+    msg: "Rundeck service is {{ rundeck_status.status.ActiveState }}"
+
+- name: Test Rundeck API availability
+  uri:
+    url: "http://127.0.0.1:4440/api/14/system/info"
+    method: GET
+    user: "{{ rundeck_admin_user }}"
+    password: "{{ rundeck_admin_password }}"
+    force_basic_auth: yes
+    status_code: [200]
+  register: api_test
+  retries: 12
+  delay: 10
+  until: api_test is not failed
+  ignore_errors: yes
+
+- name: Create a default project
+  uri:
+    url: "http://127.0.0.1:4440/api/14/projects"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body_format: json
+    body:
+      name: "default-project"
+      description: "Default project for Rundeck lab"
+      config:
+        project.description: "Default project created during setup"
+    user: "{{ rundeck_admin_user }}"
+    password: "{{ rundeck_admin_password }}"
+    force_basic_auth: yes
+    status_code: [201, 409]  # 409 if project already exists
+  register: project_creation
+  retries: 3
+  delay: 5
+  when: api_test is not failed
+
+- name: Display setup completion message
+  debug:
+    msg:
+      - "Rundeck installation completed!"
+      - "Access URL: http://192.168.56.10:4440 or http://localhost:4440"
+      - "Username: {{ rundeck_admin_user }}"
+      - "Password: {{ rundeck_admin_password }}"
+      - "Service status: {{ rundeck_service_status.status.ActiveState }}"
+      - "Default project created: {{ 'Yes' if project_creation is defined and project_creation is not failed else 'Check manually' }}"
+      - "Service management: sudo systemctl status/start/stop/restart rundeck"
+      - "View logs: sudo journalctl -u rundeck -f"

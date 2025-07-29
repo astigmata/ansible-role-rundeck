@@ -1,0 +1,28 @@
+---
+galaxy_info:
+  author: astigmata
+  description: Deploy Rundeck
+  license: MIT
+  min_ansible_version: "2.12"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - "20.04"
+        - "22.04"
+    - name: Debian
+      versions:
+        - "11"
+        - "12"
+    - name: CentOS
+      versions:
+        - "8"
+        - "9"
+
+  galaxy_tags:
+    - rundeck
+    - awx
+    - tower
+    - ansible
+
+dependencies: []

@@ -1,0 +1,5 @@
+- name: Preflight check
+  import_tasks: tasks/preflight-check.yml
+
+- name: Setup Rundeck
+  import_tasks: tasks/setup-rundeck.yml
