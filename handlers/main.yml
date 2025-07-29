@@ -11,4 +11,3 @@
   ansible.builtin.systemd:
     name: "{{ rundeck_service_name | default('rundeckd') }}"
     state: restarted
-  when: rundeck_service_result.changed
