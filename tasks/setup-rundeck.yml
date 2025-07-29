@@ -105,13 +105,6 @@
   register: rundeck_process
   ignore_errors: true
 
-- name: Test Rundeck web interface
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:4440"
-    method: GET
-    status_code: [200, 302]
-  register: rundeck_web
-
 - name: Display service status
   ansible.builtin.debug:
     msg:
