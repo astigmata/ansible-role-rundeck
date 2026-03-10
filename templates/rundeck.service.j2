@@ -1,0 +1,20 @@
+      [Unit]
+      Description=Rundeck Runbook Automation
+      After=network.target
+
+      [Service]
+      Type=forking
+      User=rundeck
+      Group=rundeck
+      Environment="JAVA_HOME=/usr/lib/jvm/default-java"
+      Environment="RUNDECK_HOME=/var/lib/rundeck"
+      ExecStart=/etc/init.d/rundeckd start
+      ExecStop=/etc/init.d/rundeckd stop
+      ExecReload=/etc/init.d/rundeckd restart
+      PIDFile=/var/run/rundeckd.pid
+      KillMode=process
+      Restart=on-failure
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
