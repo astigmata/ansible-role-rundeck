@@ -1,5 +1,6 @@
+---
 - name: Preflight check
-  ansible.builtin.import_tasks: tasks/preflight-check.yml
+  ansible.builtin.import_tasks: preflight-check.yml
 
 - name: Setup Rundeck
-  ansible.builtin.import_tasks: tasks/setup-rundeck.yml
+  ansible.builtin.import_tasks: setup-rundeck.yml

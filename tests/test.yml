@@ -1,0 +1,10 @@
+---
+- name: Test rundeck role
+  hosts: all
+  become: true
+
+  vars:
+    rundeck_server_url: "http://192.168.56.10:4440"
+
+  roles:
+    - ansible-role-rundeck

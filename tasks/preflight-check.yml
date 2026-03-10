@@ -1,30 +1,29 @@
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
-
+---
 - name: Install required packages
   ansible.builtin.apt:
     name:
       - "{{ java_version }}"
       - curl
-      - wget
       - gnupg2
-      - software-properties-common
-      - net-tools
     state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
 
 - name: Add Rundeck GPG key
-  ansible.builtin.apt_key:
+  ansible.builtin.get_url:
     url: https://packages.rundeck.com/pagerduty/rundeck/gpgkey
-    state: present
+    dest: /etc/apt/keyrings/rundeck.asc
+    mode: "0644"
 
 - name: Add Rundeck repository
   ansible.builtin.apt_repository:
-    repo: "deb https://packages.rundeck.com/pagerduty/rundeck/any/ any main"
+    repo: "deb [signed-by=/etc/apt/keyrings/rundeck.asc] https://packages.rundeck.com/pagerduty/rundeck/any/ any main"
     state: present
     filename: rundeck
-
-- name: Update apt cache after adding repository
-  ansible.builtin.apt:
     update_cache: true

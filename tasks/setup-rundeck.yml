@@ -1,40 +1,35 @@
 ---
-- name: Install and configure Rundeck packages
+- name: Install Rundeck
   ansible.builtin.apt:
-    name:
-      - rundeck
-      - default-jre-headless
+    name: "rundeck={{ rundeck_version }}*"
     state: present
-    update_cache: true
 
-- name: Stop any existing Rundeck services
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: stopped
-    enabled: false
-  loop:
-    - rundeckd
-    - rundeck
-  ignore_errors: true
-
-- name: Create rundeck directories
+- name: Create Rundeck directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
     owner: rundeck
     group: rundeck
-    mode: '0755'
+    mode: "0755"
   loop:
     - /var/log/rundeck
     - /var/rundeck/projects
+
+- name: Configure Rundeck HTTP port
+  ansible.builtin.lineinfile:
+    path: /etc/rundeck/profile
+    regexp: "^RDECK_HTTP_PORT="
+    line: "RDECK_HTTP_PORT={{ rundeck_port }}"
+    backup: true
+  notify: Restart rundeck
 
 - name: Configure Rundeck framework properties
   ansible.builtin.lineinfile:
     path: /etc/rundeck/framework.properties
     regexp: "^framework.server.url"
-    line: "framework.server.url = {{ rundeck_server_url | default('http://localhost:4440') }}"
+    line: "framework.server.url = {{ rundeck_server_url }}"
     backup: true
-  notify: restart rundeck
+  notify: Restart rundeck
 
 - name: Configure Rundeck server settings
   ansible.builtin.lineinfile:
@@ -44,70 +39,32 @@
     backup: true
   loop:
     - regexp: "^grails.serverURL"
-      line: "grails.serverURL={{ rundeck_server_url | default('http://localhost:4440') }}"
+      line: "grails.serverURL={{ rundeck_server_url }}"
     - regexp: "^server.address"
-      line: "server.address={{ rundeck_listen_address | default('0.0.0.0') }}"
-  notify: restart rundeck
+      line: "server.address={{ rundeck_listen_address }}"
+  notify: Restart rundeck
 
 - name: Create admin user properties file
   ansible.builtin.copy:
     content: |
-      {{ rundeck_admin_user | default('admin') }}:MD5:{{ (rundeck_admin_password | default('admin123') | hash('md5')) }},user,admin,architect
+      {{ rundeck_admin_user }}:MD5:{{ rundeck_admin_password | hash('md5') }},user,admin,architect
     dest: /etc/rundeck/realm.properties
     owner: rundeck
     group: rundeck
-    mode: '0640'
+    mode: "0640"
     backup: true
-  notify: restart rundeck
-
-- name: Check which Rundeck service exists
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  register: service_files
-  loop:
-    - /etc/systemd/system/rundeck.service
-    - /lib/systemd/system/rundeck.service
-    - /etc/systemd/system/rundeckd.service
-    - /lib/systemd/system/rundeckd.service
-
-- name: Set service name based on available files
-  ansible.builtin.set_fact:
-    rundeck_service_name: "{{ 'rundeck' if service_files.results | selectattr('stat.exists') | selectattr('item', 'search', 'rundeck.service') | list | length > 0 else 'rundeckd' }}"
-
-- name: Create systemd service for Rundeck if not exists
-  ansible.builtin.template:
-    src: rundeck.service.j2
-    dest: /etc/systemd/system/rundeck.service
-    owner: root
-    group: root
-    mode: '0644'
-  when: rundeck_service_name == 'rundeck'
-
-- name: Reload systemd daemon
-  ansible.builtin.systemd:
-    daemon_reload: true
+  notify: Restart rundeck
 
 - name: Enable and start Rundeck service
   ansible.builtin.systemd:
-    name: "{{ rundeck_service_name }}"
+    name: rundeckd
     enabled: true
     state: started
+    daemon_reload: true
 
 - name: Wait for Rundeck to be available
   ansible.builtin.wait_for:
-    port: 4440
+    port: "{{ rundeck_port }}"
     host: 127.0.0.1
     delay: 15
     timeout: 180
-
-- name: Check Rundeck process
-  ansible.builtin.command: pgrep -f rundeck
-  register: rundeck_process
-  ignore_errors: true
-
-- name: Display service status
-  ansible.builtin.debug:
-    msg:
-      - "Service used: {{ rundeck_service_name }}"
-      - "Rundeck process: {{ 'Running' if rundeck_process.rc == 0 else 'Not running' }}"
-      - "Check logs: sudo journalctl -u {{ rundeck_service_name }} -f"
